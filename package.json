@@ -1,0 +1,23 @@
+{
+  "name": "verdict-community",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Backend community per Verdict — Cloudflare Worker + D1. Riceve esiti anonimi (EvidenceRecord), espone statistiche aggregate. Spec: WPEP/docs/V7_REMOTE_BACKEND_DESIGN.md",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create verdict-evidence",
+    "db:schema": "wrangler d1 execute verdict-evidence --remote --file=schema.sql",
+    "db:schema-local": "wrangler d1 execute verdict-evidence --local --file=schema.sql",
+    "db:query": "wrangler d1 execute verdict-evidence --remote --command",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240620.0",
+    "typescript": "^5.5.0",
+    "wrangler": "^3.60.0"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  }
+}

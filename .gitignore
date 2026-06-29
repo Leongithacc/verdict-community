@@ -1,0 +1,16 @@
+node_modules/
+.wrangler/
+.dev.vars
+dist/
+*.log
+
+# Wrangler-generated cache + local D1 state
+.wrangler/state/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
