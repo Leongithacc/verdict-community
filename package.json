@@ -10,11 +10,16 @@
     "db:schema": "wrangler d1 execute verdict-evidence --remote --file=schema.sql",
     "db:schema-local": "wrangler d1 execute verdict-evidence --local --file=schema.sql",
     "db:query": "wrangler d1 execute verdict-evidence --remote --command",
-    "tail": "wrangler tail"
+    "tail": "wrangler tail",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "smoke": "bash scripts/smoke.sh"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.5.0",
     "@cloudflare/workers-types": "^4.20240620.0",
     "typescript": "^5.5.0",
+    "vitest": "^2.1.0",
     "wrangler": "^3.60.0"
   },
   "dependencies": {

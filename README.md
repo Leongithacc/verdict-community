@@ -76,6 +76,34 @@ npm run db:schema-local    # schema su DB locale .wrangler/state/
 npm run dev                # http://localhost:8787
 ```
 
+## Test
+
+**Unit test (vitest + @cloudflare/vitest-pool-workers):**
+
+```bash
+npm test            # run-once (CI-friendly)
+npm run test:watch  # modalita watch
+```
+
+I test girano contro un Worker isolato con D1 in-memory (zero impatto sul DB di
+produzione). Coperti: validation Zod, idempotency, sample minimo, top-tweaks.
+
+**Smoke test E2E contro il Worker LIVE:**
+
+```bash
+# Bash (Linux / macOS / Git Bash su Windows):
+npm run smoke
+
+# PowerShell (Windows nativo):
+pwsh scripts/smoke.ps1
+
+# Override endpoint (es. ambiente staging):
+VERDICT_ENDPOINT=https://staging-worker.example.dev npm run smoke
+```
+
+Lo script fa 5 test: health, POST nuovo, POST duplicate (idempotency), POST
+malformato, GET stats. Sicuro da rilanciare quante volte vuoi (idempotency).
+
 ## Comandi utili
 
 ```bash
