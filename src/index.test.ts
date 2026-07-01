@@ -37,6 +37,22 @@ describe("Health check", () => {
     const resp = await SELF.fetch("https://worker/v1/nope");
     expect(resp.status).toBe(404);
   });
+
+  it("GET /v1/health reports service + DB status", async () => {
+    const resp = await SELF.fetch("https://worker/v1/health");
+    expect(resp.status).toBe(200);
+    const json = await resp.json() as {
+      status: string;
+      service: string;
+      db: string;
+      timestamp: string;
+    };
+    expect(json.status).toBe("ok");
+    expect(json.service).toBe("verdict-community");
+    expect(json.db).toBe("ready");
+    expect(json.timestamp).toBeTruthy();
+    expect(resp.headers.get("Cache-Control")).toBe("no-store");
+  });
 });
 
 describe("POST /v1/evidence — Zod validation", () => {

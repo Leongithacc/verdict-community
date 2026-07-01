@@ -43,9 +43,14 @@ seguendo `WPEP/docs/RELEASE_V1.1_RUNBOOK.md`.
 ```bash
 URL="https://verdict-community.<account>.workers.dev"
 
-# Health check
+# Health check (endpoint di identificazione)
 curl -s $URL/
 # → {"service":"verdict-community","version":"0.1.0","docs":"..."}
+
+# Health check completo (verifica anche il DB)
+curl -s $URL/v1/health
+# → {"status":"ok","service":"verdict-community","version":"0.1.0","db":"ready","timestamp":"..."}
+# Se il DB non è raggiungibile: status=degraded, HTTP 503, adatto per uptime monitors.
 
 # Submit di prova (record fake con rig_signature valida e tweak reale)
 curl -s -X POST $URL/v1/evidence \

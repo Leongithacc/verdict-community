@@ -1,8 +1,10 @@
 // Backend community per Verdict — Cloudflare Worker.
 // Endpoint:
-//   POST /v1/evidence  → riceve batch di EvidenceRecord anonimi, idempotente per (rig_signature, tweak_id, captured_at)
-//   GET  /v1/stats     → CommunityStats aggregati per (tweak_id, rig_tier), letti da stats_cache
-//   (scheduled cron)   → ricostruisce stats_cache ogni notte alle 3:00 UTC + retention 365gg
+//   POST /v1/evidence   → riceve batch di EvidenceRecord anonimi, idempotente per (rig_signature, tweak_id, captured_at)
+//   GET  /v1/stats      → CommunityStats aggregati per (tweak_id, rig_tier), letti da stats_cache
+//   GET  /v1/top-tweaks → vetrina pubblica: top-N tweak per sample_size
+//   GET  /v1/health     → health check + verifica read-only DB (per uptime monitors esterni)
+//   (scheduled cron)    → ricostruisce stats_cache ogni notte alle 3:00 UTC + retention 365gg
 //
 // Spec sorgente: WPEP/docs/V7_REMOTE_BACKEND_DESIGN.md
 
@@ -175,6 +177,33 @@ async function handleTopTweaks(req: Request, env: Env): Promise<Response> {
   );
 }
 
+async function handleHealth(env: Env): Promise<Response> {
+  // Health check con verifica read-only del DB (SELECT 1). Il servizio è UP
+  // solo se anche D1 risponde. Utile per uptime monitors esterni (BetterUptime,
+  // UptimeRobot, ecc.) senza esporre dati sensibili.
+  const startedAt = new Date().toISOString();
+  let dbReady = false;
+  try {
+    const row = await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
+    dbReady = row?.ok === 1;
+  } catch {
+    dbReady = false;
+  }
+  return json(
+    {
+      status: dbReady ? "ok" : "degraded",
+      service: "verdict-community",
+      version: "0.1.0",
+      db: dbReady ? "ready" : "unreachable",
+      timestamp: startedAt,
+    },
+    {
+      status: dbReady ? 200 : 503,
+      headers: { "Cache-Control": "no-store" },
+    },
+  );
+}
+
 // ── Cron: ricostruisce stats_cache + retention ───────────────────────────────
 
 async function rebuildStatsCacheAndPrune(env: Env): Promise<void> {
@@ -232,6 +261,8 @@ export default {
       return handleStats(req, env);
     if (req.method === "GET" && url.pathname === "/v1/top-tweaks")
       return handleTopTweaks(req, env);
+    if (req.method === "GET" && url.pathname === "/v1/health")
+      return handleHealth(env);
     if (req.method === "GET" && url.pathname === "/")
       return json({
         service: "verdict-community",
