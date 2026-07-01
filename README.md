@@ -1,5 +1,9 @@
 # verdict-community
 
+[![CI](https://github.com/Leongithacc/verdict-community/actions/workflows/ci.yml/badge.svg)](https://github.com/Leongithacc/verdict-community/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Live endpoint](https://img.shields.io/badge/endpoint-live-brightgreen)](https://verdict-community.gz6jk62yk8.workers.dev)
+
 Backend community per [Verdict](https://github.com/Leongithacc/Verdict) — Cloudflare Worker + D1.
 Riceve esiti anonimi (`EvidenceRecord`) e ne espone statistiche aggregate per "ha aiutato
 il X% dei rig simili". Privacy-first, opt-in lato client.
@@ -131,6 +135,12 @@ o geo. Solo `rig_signature` (hash 8-char) + `rig_tier` (categoria) +
 `tweak_id` + `outcome` + `delta_percent` + `captured_at`. L'app fa
 opt-in esplicito (default OFF) prima di inviare qualunque cosa.
 
+## Contribuire
+
+Vedi [CONTRIBUTING.md](CONTRIBUTING.md). Regola d'oro: la privacy del backend
+è non-negoziabile. Nessun PR è accettato se aggiunge PII o riduce l'anonimato
+dei record. Il modello resta opt-in default OFF lato client.
+
 ## License
 
-Stessa di Verdict (MIT). Vedi repo principale.
+MIT — vedi [LICENSE](LICENSE).
