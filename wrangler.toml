@@ -13,8 +13,10 @@ binding = "DB"
 database_name = "verdict-evidence"
 database_id = "a3f3e89e-ff56-40e8-bfd8-54abe71fb9a7"
 
-# Rate limiting nativo Cloudflare Workers (10 req / 10 sec per IP, anti-flood base).
-# Le regole più fini per-rig_signature sono nel codice (vedi src/index.ts).
+# Rate limiting nativo Workers: 60 req / 60 sec, keyed per rig_signature nel codice
+# (vedi src/index.ts). NON è per-IP: la chiave è client-controlled, quindi da sola
+# non ferma un flood che ruota firme. La difesa per-IP va aggiunta come WAF
+# rate-limiting rule dal dashboard Cloudflare (Security > WAF > Rate limiting rules).
 [[unsafe.bindings]]
 name = "RATE_LIMITER"
 type = "ratelimit"

@@ -38,11 +38,15 @@ type EvidenceRecord = z.infer<typeof EvidenceRecordSchema>;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+// CORS su OGNI risposta, non solo sul preflight: community.html è servita da
+// github.io e fa fetch cross-origin verso workers.dev — senza ACAO sulla GET
+// il browser blocca la risposta e la leaderboard non carica mai.
 const json = (data: unknown, init: ResponseInit = {}) =>
   new Response(JSON.stringify(data), {
     ...init,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
+      "Access-Control-Allow-Origin": "*",
       ...(init.headers || {}),
     },
   });
@@ -73,7 +77,10 @@ async function handleSubmit(req: Request, env: Env): Promise<Response> {
   }
   const { records } = parsed.data;
 
-  // Rate limit per rig_signature (sopra al rate limit IP nativo che già protegge).
+  // Rate limit per rig_signature: 60 req/min (binding in wrangler.toml).
+  // LIMITE NOTO: la chiave è controllata dal client — chi ruota firme lo aggira.
+  // La difesa per-IP non è esprimibile qui: va configurata come WAF rate-limiting
+  // rule dal dashboard Cloudflare (Security > WAF). Questo è solo il 2° livello.
   // Tutti i record di una request devono avere la STESSA rig_signature — altrimenti
   // qualcuno sta tentando di mascherare il flood. Rifiuta in toto.
   const firstSig = records[0]!.rig_signature;
@@ -81,7 +88,7 @@ async function handleSubmit(req: Request, env: Env): Promise<Response> {
     return err(400, "Tutti i record devono avere la stessa rig_signature");
   }
   const rl = await env.RATE_LIMITER.limit({ key: `rig:${firstSig}` });
-  if (!rl.success) return err(429, "Rate limit superato (1 POST/min per rig)");
+  if (!rl.success) return err(429, "Rate limit superato (max 60 req/min per rig)");
 
   // Insert idempotente. SQLite INSERT OR IGNORE conta come "duplicate" i conflitti
   // sulla PK (rig_signature, tweak_id, captured_at).
