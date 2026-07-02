@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { SELF, env } from "cloudflare:test";
+import {
+  SELF,
+  env,
+  createScheduledController,
+  createExecutionContext,
+  waitOnExecutionContext,
+} from "cloudflare:test";
+import worker from "./index";
 
 // Applica lo schema D1 prima di TUTTI i test (il D1 di test e in-memory
 // e parte vuoto; senza schema le INSERT esplodono con "no such table").
@@ -214,6 +221,51 @@ describe("CORS", () => {
     const resp = await SELF.fetch("https://worker/v1/evidence", { method: "OPTIONS" });
     expect(resp.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(resp.headers.get("Access-Control-Allow-Methods")).toContain("POST");
+  });
+});
+
+describe("cron rebuild (atomic stats_cache)", () => {
+  it("aggregates evidence into stats_cache with correct percentages", async () => {
+    // 10 rig distinti, stesso (tweak, tier): 7 helped + 2 no-effect + 1 hurt.
+    const outcomes = [
+      "helped", "helped", "helped", "helped", "helped", "helped", "helped",
+      "no-effect", "no-effect", "hurt",
+    ];
+    const rigs = [
+      "RIG-CR01-0001", "RIG-CR02-0002", "RIG-CR03-0003", "RIG-CR04-0004", "RIG-CR05-0005",
+      "RIG-CR06-0006", "RIG-CR07-0007", "RIG-CR08-0008", "RIG-CR09-0009", "RIG-CR10-0010",
+    ];
+    for (let i = 0; i < rigs.length; i++) {
+      const resp = await SELF.fetch("https://worker/v1/evidence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          records: [validRecord({
+            rig_signature: rigs[i],
+            tweak_id: "cron-rebuild-tweak",
+            rig_tier: "EPICO",
+            outcome: outcomes[i],
+          })],
+        }),
+      });
+      expect(resp.status).toBe(200);
+    }
+
+    // Trigger del cron (chiama rebuildStatsCacheAndPrune via scheduled).
+    const ctrl = createScheduledController({ scheduledTime: new Date(1_000), cron: "0 3 * * *" });
+    const ctx = createExecutionContext();
+    await worker.scheduled!(ctrl, env, ctx);
+    await waitOnExecutionContext(ctx);
+
+    const resp = await SELF.fetch("https://worker/v1/stats?tweak_id=cron-rebuild-tweak&rig_tier=EPICO");
+    expect(resp.status).toBe(200);
+    const json = await resp.json() as {
+      sample_size: number; helped_percent: number; no_effect_percent: number; hurt_percent: number;
+    };
+    expect(json.sample_size).toBe(10);
+    expect(json.helped_percent).toBe(70);
+    expect(json.no_effect_percent).toBe(20);
+    expect(json.hurt_percent).toBe(10);
   });
 });
 

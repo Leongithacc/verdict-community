@@ -8,6 +8,9 @@ compatibility_flags = ["nodejs_compat"]
 crons = ["0 3 * * *"]
 
 # D1 binding. Dopo `npm run db:create` riempi qui database_id con l'id che ti restituisce.
+# NB (audit F11.3): database_id NON è un segreto — è un id di risorsa; per toccarlo
+# serve comunque l'auth dell'account Cloudflare. Resta in VCS perché wrangler deploy
+# lo legge da qui; nessuna credenziale è mai committata.
 [[d1_databases]]
 binding = "DB"
 database_name = "verdict-evidence"

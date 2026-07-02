@@ -41,6 +41,11 @@ type EvidenceRecord = z.infer<typeof EvidenceRecordSchema>;
 // CORS su OGNI risposta, non solo sul preflight: community.html è servita da
 // github.io e fa fetch cross-origin verso workers.dev — senza ACAO sulla GET
 // il browser blocca la risposta e la leaderboard non carica mai.
+// DECISIONE (audit F11.1): ACAO="*" anche su POST /v1/evidence. È deliberato e
+// benigno: il CORS non impedisce l'invio della richiesta (solo la lettura della
+// risposta cross-origin), e la submission è anonima per design + rate-limited.
+// Restringere ACAO sul POST non aggiungerebbe sicurezza reale (il client WPF non
+// usa CORS). API pubblica read-mostly → "*" è la scelta corretta e standard.
 const json = (data: unknown, init: ResponseInit = {}) =>
   new Response(JSON.stringify(data), {
     ...init,
@@ -214,34 +219,38 @@ async function handleHealth(env: Env): Promise<Response> {
 // ── Cron: ricostruisce stats_cache + retention ───────────────────────────────
 
 async function rebuildStatsCacheAndPrune(env: Env): Promise<void> {
-  // Retention: butta evidence vecchie >365gg (privacy + storage).
+  // Retention: butta evidence vecchie >365gg (privacy + storage). Prima
+  // dell'aggregazione così le righe scadute non finiscono nelle percentuali.
   await env.DB.prepare(
     `DELETE FROM evidence WHERE received_at < datetime('now','-365 days')`,
   ).run();
 
   // Aggrega: per ogni (tweak_id, rig_tier) calcola % di helped/no-effect/hurt
   // (gli 'applied' sono fuori dal calcolo: misurano "chi ci ha provato" non l'esito).
-  // Sostituisce in toto la stats_cache vecchia.
-  await env.DB.prepare(`DELETE FROM stats_cache`).run();
-
-  await env.DB.prepare(
-    `INSERT INTO stats_cache
-       (tweak_id, rig_tier, sample_size, helped_percent, no_effect_percent, hurt_percent, computed_at)
-     SELECT
-       tweak_id,
-       rig_tier,
-       SUM(CASE WHEN outcome IN ('helped','no-effect','hurt') THEN 1 ELSE 0 END) AS sample,
-       CAST(ROUND(100.0 * SUM(CASE WHEN outcome='helped' THEN 1 ELSE 0 END)
-                  / NULLIF(SUM(CASE WHEN outcome IN ('helped','no-effect','hurt') THEN 1 ELSE 0 END), 0)) AS INTEGER),
-       CAST(ROUND(100.0 * SUM(CASE WHEN outcome='no-effect' THEN 1 ELSE 0 END)
-                  / NULLIF(SUM(CASE WHEN outcome IN ('helped','no-effect','hurt') THEN 1 ELSE 0 END), 0)) AS INTEGER),
-       CAST(ROUND(100.0 * SUM(CASE WHEN outcome='hurt' THEN 1 ELSE 0 END)
-                  / NULLIF(SUM(CASE WHEN outcome IN ('helped','no-effect','hurt') THEN 1 ELSE 0 END), 0)) AS INTEGER),
-       datetime('now')
-     FROM evidence
-     GROUP BY tweak_id, rig_tier
-     HAVING sample > 0`,
-  ).run();
+  // DELETE + INSERT in UN batch = transazione implicita D1: senza, una fetch
+  // tra i due statement (o un crash del secondo) vedrebbe stats_cache vuota
+  // fino al cron successivo (fino a 24h di leaderboard vuota). Atomico.
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM stats_cache`),
+    env.DB.prepare(
+      `INSERT INTO stats_cache
+         (tweak_id, rig_tier, sample_size, helped_percent, no_effect_percent, hurt_percent, computed_at)
+       SELECT
+         tweak_id,
+         rig_tier,
+         SUM(CASE WHEN outcome IN ('helped','no-effect','hurt') THEN 1 ELSE 0 END) AS sample,
+         CAST(ROUND(100.0 * SUM(CASE WHEN outcome='helped' THEN 1 ELSE 0 END)
+                    / NULLIF(SUM(CASE WHEN outcome IN ('helped','no-effect','hurt') THEN 1 ELSE 0 END), 0)) AS INTEGER),
+         CAST(ROUND(100.0 * SUM(CASE WHEN outcome='no-effect' THEN 1 ELSE 0 END)
+                    / NULLIF(SUM(CASE WHEN outcome IN ('helped','no-effect','hurt') THEN 1 ELSE 0 END), 0)) AS INTEGER),
+         CAST(ROUND(100.0 * SUM(CASE WHEN outcome='hurt' THEN 1 ELSE 0 END)
+                    / NULLIF(SUM(CASE WHEN outcome IN ('helped','no-effect','hurt') THEN 1 ELSE 0 END), 0)) AS INTEGER),
+         datetime('now')
+       FROM evidence
+       GROUP BY tweak_id, rig_tier
+       HAVING sample > 0`,
+    ),
+  ]);
 }
 
 // ── Worker entry point ───────────────────────────────────────────────────────
@@ -280,7 +289,7 @@ export default {
     return err(404, "Endpoint sconosciuto");
   },
 
-  async scheduled(_evt: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(_ctrl: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(rebuildStatsCacheAndPrune(env));
   },
 };
