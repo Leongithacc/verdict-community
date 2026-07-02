@@ -1,14 +1,21 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { SELF, env } from "cloudflare:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 // Applica lo schema D1 prima di TUTTI i test (il D1 di test e in-memory
 // e parte vuoto; senza schema le INSERT esplodono con "no such table").
+// schema.sql arriva dal binding TEST_SCHEMA_SQL (letto in vitest.config.ts,
+// contesto Node): node:fs non esiste dentro workerd.
 beforeAll(async () => {
-  const schema = readFileSync(join(__dirname, "..", "schema.sql"), "utf8");
-  // D1 accetta un singolo statement per .exec() → split su ';' e filter vuoti.
-  const statements = schema.split(";").map(s => s.trim()).filter(s => s.length > 0);
+  const schema = (env as unknown as { TEST_SCHEMA_SQL: string }).TEST_SCHEMA_SQL;
+  // exec() di D1 tratta OGNI RIGA come statement → serve: via i commenti '--'
+  // (anche quelli inline a fine riga), split su ';', collasso su riga singola.
+  const statements = schema
+    .split("\n")
+    .map(line => line.replace(/--.*$/, ""))
+    .join("\n")
+    .split(";")
+    .map(s => s.replace(/\s+/g, " ").trim())
+    .filter(s => s.length > 0);
   for (const stmt of statements) {
     await env.DB.exec(stmt);
   }
@@ -188,6 +195,25 @@ describe("GET /v1/stats — sample threshold", () => {
   it("rejects invalid rig_tier", async () => {
     const resp = await SELF.fetch("https://worker/v1/stats?tweak_id=foo&rig_tier=FANTASMA");
     expect(resp.status).toBe(400);
+  });
+});
+
+describe("CORS", () => {
+  it("GET responses carry Access-Control-Allow-Origin (github.io -> workers.dev)", async () => {
+    const resp = await SELF.fetch("https://worker/v1/top-tweaks");
+    expect(resp.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
+
+  it("error responses carry it too", async () => {
+    const resp = await SELF.fetch("https://worker/v1/nope");
+    expect(resp.status).toBe(404);
+    expect(resp.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
+
+  it("OPTIONS preflight still answers with CORS headers", async () => {
+    const resp = await SELF.fetch("https://worker/v1/evidence", { method: "OPTIONS" });
+    expect(resp.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(resp.headers.get("Access-Control-Allow-Methods")).toContain("POST");
   });
 });
 
