@@ -6,7 +6,7 @@ import { SELF, env } from "cloudflare:test";
 // schema.sql arriva dal binding TEST_SCHEMA_SQL (letto in vitest.config.ts,
 // contesto Node): node:fs non esiste dentro workerd.
 beforeAll(async () => {
-  const schema = (env as unknown as { TEST_SCHEMA_SQL: string }).TEST_SCHEMA_SQL;
+  const schema = env.TEST_SCHEMA_SQL;
   // exec() di D1 tratta OGNI RIGA come statement → serve: via i commenti '--'
   // (anche quelli inline a fine riga), split su ';', collasso su riga singola.
   const statements = schema
