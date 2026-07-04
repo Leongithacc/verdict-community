@@ -189,7 +189,7 @@ async function handleTopTweaks(req: Request, env: Env): Promise<Response> {
   );
 }
 
-async function handleHealth(env: Env): Promise<Response> {
+async function handleHealth(env: Env, headOnly = false): Promise<Response> {
   // Health check con verifica read-only del DB (SELECT 1). Il servizio è UP
   // solo se anche D1 risponde. Utile per uptime monitors esterni (BetterUptime,
   // UptimeRobot, ecc.) senza esporre dati sensibili.
@@ -201,6 +201,16 @@ async function handleHealth(env: Env): Promise<Response> {
   } catch {
     dbReady = false;
   }
+  const httpStatus = dbReady ? 200 : 503;
+  // HEAD: solo status code, niente body (RFC 7231 §4.3.2). Necessario perché gli
+  // uptime monitor free (es. UptimeRobot) usano HEAD e non permettono di scegliere
+  // GET: senza questo ramo cadrebbero nel 404 finale e segnerebbero il servizio DOWN.
+  if (headOnly) {
+    return new Response(null, {
+      status: httpStatus,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
   return json(
     {
       status: dbReady ? "ok" : "degraded",
@@ -210,7 +220,7 @@ async function handleHealth(env: Env): Promise<Response> {
       timestamp: startedAt,
     },
     {
-      status: dbReady ? 200 : 503,
+      status: httpStatus,
       headers: { "Cache-Control": "no-store" },
     },
   );
@@ -264,7 +274,7 @@ export default {
       return new Response(null, {
         headers: {
           "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Methods": "GET, HEAD, POST, OPTIONS",
           "Access-Control-Allow-Headers": "Content-Type",
           "Access-Control-Max-Age": "86400",
         },
@@ -277,8 +287,8 @@ export default {
       return handleStats(req, env);
     if (req.method === "GET" && url.pathname === "/v1/top-tweaks")
       return handleTopTweaks(req, env);
-    if (req.method === "GET" && url.pathname === "/v1/health")
-      return handleHealth(env);
+    if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/v1/health")
+      return handleHealth(env, req.method === "HEAD");
     if (req.method === "GET" && url.pathname === "/")
       return json({
         service: "verdict-community",

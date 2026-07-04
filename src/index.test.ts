@@ -67,6 +67,14 @@ describe("Health check", () => {
     expect(json.timestamp).toBeTruthy();
     expect(resp.headers.get("Cache-Control")).toBe("no-store");
   });
+
+  it("HEAD /v1/health returns 200 with no body (uptime monitor su HEAD)", async () => {
+    // UptimeRobot free e altri monitor usano HEAD: deve dare 200, non 404.
+    const resp = await SELF.fetch("https://worker/v1/health", { method: "HEAD" });
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get("Cache-Control")).toBe("no-store");
+    expect(await resp.text()).toBe("");
+  });
 });
 
 describe("POST /v1/evidence — Zod validation", () => {
